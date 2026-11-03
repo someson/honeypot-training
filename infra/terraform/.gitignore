@@ -5,3 +5,5 @@
 !*.tfvars.example
 crash.log
 .terraform.tfstate.lock.info
+tfplan
+*.tfplan

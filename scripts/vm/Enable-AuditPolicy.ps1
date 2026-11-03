@@ -8,6 +8,12 @@
 #>
 $ErrorActionPreference = 'Stop'
 
+# Create a registry key only if it is missing. New-Item -Force on an EXISTING key
+# deletes and recreates it (with its whole subtree), so it must never run on existing keys.
+function Ensure-RegistryKey([string]$Path) {
+    if (-not (Test-Path -Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+}
+
 # Subcategory -> what it gives us in SecurityEvent
 $subcategories = [ordered]@{
     'Logon'                          = '4624/4625 logon success/failure'
@@ -34,20 +40,20 @@ foreach ($name in $subcategories.Keys) {
 }
 
 # Make subcategory settings win over legacy category policy.
-New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Force | Out-Null
+Ensure-RegistryKey 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -Value 1 -Type DWord
 
 # Command line in 4688.
 $audit = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit'
-New-Item -Path $audit -Force | Out-Null
+Ensure-RegistryKey $audit
 Set-ItemProperty -Path $audit -Name 'ProcessCreationIncludeCmdLine_Enabled' -Value 1 -Type DWord
 Write-Output '[+] Command line included in 4688'
 
 # PowerShell Script Block Logging (4104) and Module Logging (4103).
 $ps = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell'
-New-Item -Path "$ps\ScriptBlockLogging" -Force | Out-Null
+Ensure-RegistryKey "$ps\ScriptBlockLogging"
 Set-ItemProperty -Path "$ps\ScriptBlockLogging" -Name 'EnableScriptBlockLogging' -Value 1 -Type DWord
-New-Item -Path "$ps\ModuleLogging\ModuleNames" -Force | Out-Null
+Ensure-RegistryKey "$ps\ModuleLogging\ModuleNames"
 Set-ItemProperty -Path "$ps\ModuleLogging" -Name 'EnableModuleLogging' -Value 1 -Type DWord
 Set-ItemProperty -Path "$ps\ModuleLogging\ModuleNames" -Name '*' -Value '*' -Type String
 Write-Output '[+] PowerShell script block + module logging'

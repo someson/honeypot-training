@@ -3,6 +3,7 @@
 location                  = "westeurope"
 vm_name                   = "HR-FILE-SRV-01"
 vm_size                   = "Standard_D2s_v6"
+vm_zone                   = "1" # check: az vm list-skus -l <region> --size <size> -o table
 admin_username            = "hrsvcadmin"
 rdp_source_address_prefix = "*" # Any. For hardening: "203.0.113.10/32"
 bootstrap_vm              = true

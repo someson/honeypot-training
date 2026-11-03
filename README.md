@@ -1,10 +1,10 @@
 # Bait n' Switch — Windows RDP Honeypot + Microsoft Sentinel
 
 Course project (Weeks 7–8): deploy a deliberately exposed Windows VM in Azure, collect telemetry
-in Microsoft Sentinel, analyze real-world attacks from the internet and a simulated breach by a
-classmate, and submit a PDF report.
+in Microsoft Sentinel, and analyze real-world attacks from the internet and a simulated breach by a
+classmate.
 
-> Everything here is scaffolding. The real data (IPs, countries, attempt counts, screenshots)
+> Everything here is scaffolding. The real data (IPs, countries, attempt counts)
 > only comes from your own workspace.
 
 ## Quick start (macOS, `az` and `terraform` already installed)
@@ -86,19 +86,17 @@ flowchart LR
 | [`scripts/classmate/Cleanup-Simulation.ps1`](scripts/classmate/Cleanup-Simulation.ps1) | Reverts everything Simulate-Attack did |
 | [`kql/`](kql/) | KQL: smoke test, statistics, Geo-IP, attack timeline, Sysmon hunting |
 | [`sentinel/honeypot-workbook.json`](sentinel/honeypot-workbook.json) | "Honeypot Dashboard" workbook: attack map, top usernames, trends |
-| [`report/report-template.md`](report/report-template.md) | PDF report template (Phase 6) with a ready Hardening section |
 
 ## Checklist
 
 - [ ] **Phase 1.** Workspace + Sentinel, VM, NSG 3389 ← Any, strong password, *Windows Security Events via AMA* connector (All Events)
 - [ ] Audit policy and Sysmon are installed by Terraform (Run Command). Verify they work **before** the classmate attack
-- [ ] Content hub → install "Windows Security Events" (do **not** create a second DCR in the connector wizard)
+- [ ] Defender portal (security.microsoft.com): Microsoft Sentinel → Content management → Content hub → install "Windows Security Events" (do **not** create a second DCR in the connector wizard)
 - [ ] **Phase 2.** 3 failed RDP logons from your machine show up in `kql/01-smoke-test.kql`; Brute Force incident set to Active and assigned to yourself
 - [ ] **Phase 3.** Wait for bots (minutes to hours), triage incidents, Geo-IP, Investigation Graph
 - [ ] **Phase 4.** Classmate logs in and performs actions; rebuild the timeline (`kql/05-attack-timeline.kql`) and compare with their list
 - [ ] **Phase 5.** Sysmon, session recording, workbook, optionally T-Pot
-- [ ] **Phase 6.** Screenshots + report from `report/report-template.md` → PDF
-- [ ] **After submission:** `terraform destroy` so you stop paying and the exposed VM is gone
+- [ ] **When done:** `terraform destroy` so you stop paying and the exposed VM is gone
 
 ## Safety and cost
 

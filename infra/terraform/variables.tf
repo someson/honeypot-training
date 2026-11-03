@@ -36,6 +36,12 @@ variable "vm_name" {
   }
 }
 
+variable "vm_zone" {
+  description = "Availability zone for the VM. Dsv6 in westeurope is restricted to zone 1 for some subscriptions (see az vm list-skus). null = regional (no zone)."
+  type        = string
+  default     = "1"
+}
+
 variable "vm_size" {
   description = "Dsv6 is NVMe-only and needs a Gen2 image; both are handled in main.tf."
   type        = string

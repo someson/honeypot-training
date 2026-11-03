@@ -6,6 +6,12 @@ resource "azurerm_resource_group" "this" {
   name     = var.resource_group_name
   location = var.location
   tags     = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -18,6 +24,12 @@ resource "azurerm_log_analytics_workspace" "this" {
   sku                 = "PerGB2018"
   retention_in_days   = var.workspace_retention_days
   tags                = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_sentinel_log_analytics_workspace_onboarding" "this" {
@@ -33,6 +45,12 @@ resource "azurerm_virtual_network" "this" {
   resource_group_name = azurerm_resource_group.this.name
   address_space       = ["10.20.0.0/16"]
   tags                = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_subnet" "servers" {
@@ -49,6 +67,12 @@ resource "azurerm_public_ip" "vm" {
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_network_security_group" "vm" {
@@ -69,6 +93,12 @@ resource "azurerm_network_security_group" "vm" {
     source_address_prefix      = var.rdp_source_address_prefix
     destination_address_prefix = "*"
   }
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_network_interface" "vm" {
@@ -82,6 +112,12 @@ resource "azurerm_network_interface" "vm" {
     subnet_id                     = azurerm_subnet.servers.id
     private_ip_address_allocation = "Dynamic"
     public_ip_address_id          = azurerm_public_ip.vm.id
+  }
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
   }
 }
 
@@ -109,6 +145,7 @@ resource "azurerm_windows_virtual_machine" "honeypot" {
   location              = azurerm_resource_group.this.location
   resource_group_name   = azurerm_resource_group.this.name
   size                  = var.vm_size
+  zone                  = var.vm_zone
   admin_username        = var.admin_username
   admin_password        = random_password.admin.result
   network_interface_ids = [azurerm_network_interface.vm.id]
@@ -137,6 +174,12 @@ resource "azurerm_windows_virtual_machine" "honeypot" {
   }
 
   tags = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_virtual_machine_extension" "ama" {
@@ -148,6 +191,12 @@ resource "azurerm_virtual_machine_extension" "ama" {
   auto_upgrade_minor_version = true
   automatic_upgrade_enabled  = true
   tags                       = var.tags
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -188,6 +237,12 @@ resource "azurerm_monitor_data_collection_rule" "security_events" {
   }
 
   depends_on = [azurerm_sentinel_log_analytics_workspace_onboarding.this]
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 # Sysmon, PowerShell, firewall, task scheduler, RDP session logs. Lands in the Event table.
@@ -225,6 +280,12 @@ resource "azurerm_monitor_data_collection_rule" "forensics_events" {
       ]
     }
   }
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_monitor_data_collection_rule_association" "security_events" {
@@ -255,6 +316,12 @@ resource "azurerm_virtual_machine_run_command" "audit_policy" {
   }
 
   depends_on = [azurerm_virtual_machine_extension.ama]
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_virtual_machine_run_command" "sysmon" {
@@ -268,6 +335,12 @@ resource "azurerm_virtual_machine_run_command" "sysmon" {
   }
 
   depends_on = [azurerm_virtual_machine_run_command.audit_policy]
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
 
 resource "azurerm_virtual_machine_run_command" "session_recorder" {
@@ -281,4 +354,10 @@ resource "azurerm_virtual_machine_run_command" "session_recorder" {
   }
 
   depends_on = [azurerm_virtual_machine_run_command.sysmon]
+
+  # "created-on" is stamped on every resource by Azure (most likely a tenant policy), not by
+  # this code. Ignore only that key; all other tags are still compared.
+  lifecycle {
+    ignore_changes = [tags["created-on"]]
+  }
 }
