@@ -189,6 +189,21 @@ Defender portal → Cases → Case 1870 "Honeypot - RDP Brute Force (failed logo
 Incident graph: `87.106.147.134` → `HR-FILE-SRV-01`. The IP targeted a single account
 (`Administrator`), so this is password guessing against one account, not password spraying.
 
+### 4. Statistics at the end of the observation
+
+The subscription deallocates the VM automatically after a few hours, so the observation covers
+about 16:00–21:31 UTC on 3 November 2026.
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where EventID == 4625 and not(IpAddress in ('-', '', '<my-ip>')) | summarize Attempts=count(), Users=make_set(TargetUserName, 20), First=min(TimeGenerated), Last=max(TimeGenerated) by IpAddress | extend Country=tostring(geo_info_from_ip_address(IpAddress).country) | sort by Attempts desc" --output table
+Attempts    Country    First                         IpAddress       Last                          TableName      Users
+----------  ---------  ----------------------------  --------------  ----------------------------  -------------  -----------------
+17          Germany    2026-11-03T20:00:01.0053459Z  87.106.147.134  2026-11-03T21:26:12.7815436Z  PrimaryResult  ["Administrator"]
+```
+
+Honeypot Dashboard (last 7 days, own IP excluded) a few minutes later: 18 failed logons, 1 IP,
+1 country (Germany), 1 username (`Administrator`), last attempt 21:31 UTC.
+
 ## Phase 4: Simulated breach and forensics
 
 No classmate was available, so I played the attacker myself: RDP logon with the real credentials,
@@ -283,6 +298,9 @@ create no process and do not appear here.
 The tuned rule raised Case 1879 "Honeypot - User created / firewall changed / scheduled task created"
 (High) for the attack. Manage case → Open, assigned to myself.
 
+Case 1881 (High) was raised by the cleanup session: re-enabling the firewall produced another 4950.
+This is an expected alert on legitimate admin activity.
+
 ### 8. Verification
 
 | Action | Found in |
@@ -376,3 +394,10 @@ keeps its 1 h lookback so slow attacks (one attempt every 5 minutes) are still c
 ...
 Apply complete! Resources: 0 added, 3 changed, 0 destroyed.
 ```
+
+## Phase 6: Report
+
+The PDF report (8 pages) was built from this log and the portal screenshots: connector, incidents,
+investigation graphs, AbuseIPDB and the Honeypot Dashboard. My own IP and the tenant ID in the browser
+address bar were redacted. The report is not committed: the repository is public and the report contains
+my name.
