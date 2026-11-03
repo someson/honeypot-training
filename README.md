@@ -4,8 +4,17 @@ Course project (Weeks 7–8): deploy a deliberately exposed Windows VM in Azure,
 in Microsoft Sentinel, and analyze real-world attacks from the internet and a simulated breach by a
 classmate.
 
-> Everything here is scaffolding. The real data (IPs, countries, attempt counts)
-> only comes from your own workspace.
+## Results
+
+Observed on 3 November 2026 (the subscription deallocates the VM after a few hours):
+
+- First internet attack about 4 hours after deployment: 18 failed RDP logons from one IP
+  (`87.106.147.134`, IONOS data center in Germany, 100% abuse score on AbuseIPDB), all against `Administrator`.
+- Simulated breach (performed by myself, no classmate was available): all seven attacker actions
+  reconstructed from 4624, 4720/4732, 4950, Sysmon 1 and PowerShell 4104.
+- Detections tuned along the way: a false positive on built-in Windows activity and duplicate alerts were fixed.
+
+Every command with its CLI output is in [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md).
 
 ## Quick start (macOS)
 
@@ -54,7 +63,7 @@ flowchart LR
     end
 
     subgraph VM["HR-FILE-SRV-01 (Windows PowerShell 5.1)"]
-        BOOT["Enable-AuditPolicy.ps1<br/>Install-Sysmon.ps1<br/>Install-SessionRecorder.ps1 (optional)"]
+        BOOT["Enable-AuditPolicy.ps1<br/>Install-Sysmon.ps1"]
         LOGS["Security log, Sysmon,<br/>PowerShell, Firewall, TaskScheduler"]
         AMA["Azure Monitor Agent"]
         SIM["Simulate-Attack.ps1<br/>Cleanup-Simulation.ps1"]
@@ -62,7 +71,7 @@ flowchart LR
 
     subgraph EXT["Internet"]
         BOTS["Bots<br/>RDP brute force"]
-        MATE["Classmate<br/>RDP with shared credentials"]
+        MATE["Attacker (classmate or yourself)<br/>RDP with the real credentials"]
     end
 
     LAW[("Log Analytics + Sentinel<br/>SecurityEvent / Event tables")]
@@ -81,19 +90,20 @@ flowchart LR
 |---|---|---|
 | You | `terraform`, `az`, Windows App, Sentinel portal (KQL, incidents, workbook) | Mac / browser |
 | Terraform → Azure | Creates all resources; Run Command delivers `scripts/vm/*.ps1` | Azure control plane |
-| VM | Audit policy, Sysmon, session recorder; AMA ships logs to Sentinel | `HR-FILE-SRV-01` |
-| Classmate | `Simulate-Attack.ps1` (or manual actions), then `Cleanup-Simulation.ps1` | RDP session on the VM |
+| VM | Audit policy, Sysmon; AMA ships logs to Sentinel | `HR-FILE-SRV-01` |
+| Attacker (classmate or yourself) | Manual actions or `Simulate-Attack.ps1`, then `Cleanup-Simulation.ps1` | RDP session on the VM |
 | Bots | Brute-force RDP logons (4625) | Internet → port 3389 |
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| [`docs/GUIDE.md`](docs/GUIDE.md) | Step-by-step guide for all 6 phases |
+| [`docs/GUIDE.md`](docs/GUIDE.md) | Step-by-step guide for all phases |
+| [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) | Walkthrough log: every command run, with its CLI output |
 | [`infra/terraform/`](infra/terraform/) | Terraform: workspace + Sentinel, VM `HR-FILE-SRV-01` (`Standard_D2s_v6`), NSG 3389 ← Any, AMA, 2 DCRs, analytics rules, workbook, in-guest bootstrap |
 | [`scripts/vm/Enable-AuditPolicy.ps1`](scripts/vm/Enable-AuditPolicy.ps1) | Enables required audit subcategories, command line in 4688, PowerShell script block logging |
 | [`scripts/vm/Install-Sysmon.ps1`](scripts/vm/Install-Sysmon.ps1) | Sysmon with the SwiftOnSecurity config |
-| [`scripts/vm/Install-SessionRecorder.ps1`](scripts/vm/Install-SessionRecorder.ps1) | RDP session screen recording (ffmpeg, starts at any user's logon) |
+| [`scripts/vm/Install-SessionRecorder.ps1`](scripts/vm/Install-SessionRecorder.ps1) | Optional RDP session screen recording (ffmpeg); off by default (`install_session_recorder = false`) |
 | [`scripts/classmate/Simulate-Attack.ps1`](scripts/classmate/Simulate-Attack.ps1) | "Suspicious" actions for the classmate, with a ground-truth log |
 | [`scripts/classmate/Cleanup-Simulation.ps1`](scripts/classmate/Cleanup-Simulation.ps1) | Reverts everything Simulate-Attack did |
 | [`kql/`](kql/) | KQL: smoke test, statistics, Geo-IP, attack timeline, Sysmon hunting |
@@ -101,13 +111,13 @@ flowchart LR
 
 ## Checklist
 
-- [ ] **Phase 1.** Workspace + Sentinel, VM, NSG 3389 ← Any, strong password, *Windows Security Events via AMA* connector (All Events)
-- [ ] Audit policy and Sysmon are installed by Terraform (Run Command). Verify they work **before** the classmate attack
-- [ ] Defender portal (security.microsoft.com): Microsoft Sentinel → Content management → Content hub → install "Windows Security Events" (do **not** create a second DCR in the connector wizard)
-- [ ] **Phase 2.** 3 failed RDP logons from your machine show up in `kql/01-smoke-test.kql`; Brute Force incident set to Active and assigned to yourself
-- [ ] **Phase 3.** Wait for bots (minutes to hours), triage incidents, Geo-IP, Investigation Graph
-- [ ] **Phase 4.** Classmate logs in and performs actions; rebuild the timeline (`kql/05-attack-timeline.kql`) and compare with their list
-- [ ] **Phase 5.** Sysmon, session recording, workbook, optionally T-Pot
+- [x] **Phase 1.** Workspace + Sentinel, VM, NSG 3389 ← Any, strong password, *Windows Security Events via AMA* connector (All Events)
+- [x] Audit policy and Sysmon are installed by Terraform (Run Command). Verify they work **before** the attack simulation
+- [x] Defender portal (security.microsoft.com): Microsoft Sentinel → Content management → Content hub → install "Windows Security Events" (do **not** create a second DCR in the connector wizard)
+- [x] **Phase 2.** Failed RDP logons from your machine show up in `kql/01-smoke-test.kql`; Brute Force incident set to Open (In Progress) and assigned to yourself
+- [x] **Phase 3.** Wait for bots (hours), triage incidents, Geo-IP, Investigation Graph
+- [x] **Phase 4.** Attacker logs in and performs actions (done by myself, no classmate available); rebuild the timeline and compare with the ground truth
+- [x] **Phase 5.** Sysmon, tuned detections, workbook
 - [ ] **When done:** `terraform -chdir=infra/terraform destroy` so you stop paying and the exposed VM is gone
 
 ## Safety and cost
