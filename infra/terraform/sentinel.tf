@@ -25,9 +25,13 @@ resource "azurerm_sentinel_alert_rule_scheduled" "rdp_brute_force" {
                 TargetAccounts = make_set(TargetUserName, 25),
                 AccountCount   = dcount(TargetUserName),
                 StartTime      = min(TimeGenerated),
-                EndTime        = max(TimeGenerated)
+                EndTime        = max(TimeGenerated),
+                LastIngested   = max(ingestion_time())
             by IpAddress, Computer
     | where FailedAttempts >= ${var.brute_force_threshold}
+    // Alert only when new failures arrived since the previous run (frequency 5 min),
+    // otherwise the 1 h lookback re-alerts on the same attempts every 5 minutes.
+    | where LastIngested > ago(5m)
     | extend TopAccount = tostring(TargetAccounts[0])
   KQL
 
@@ -89,6 +93,8 @@ resource "azurerm_sentinel_alert_rule_scheduled" "success_after_failures" {
     SecurityEvent
     | where EventID == 4624 and LogonType in (3, 10)
     | where isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+    // Only logons ingested since the previous run, so each logon alerts once.
+    | where ingestion_time() > ago(5m)
     | join kind=inner Failed on IpAddress
     | project TimeGenerated, Computer, TargetUserName, IpAddress, LogonType, FailedAttempts
   KQL
@@ -139,6 +145,8 @@ resource "azurerm_sentinel_alert_rule_scheduled" "persistence_and_defense_evasio
   query = <<-KQL
     SecurityEvent
     | where EventID in (4720, 4732, 4698, 4946, 4947, 4948, 4950, 1102)
+    // Only events ingested since the previous run, so each event alerts once.
+    | where ingestion_time() > ago(5m)
     // The SubjectUserName column is empty for these events via AMA; read it from EventData.
     | extend Actor = coalesce(extract('SubjectUserName">([^<]+)', 1, EventData), "n/a"),
              Name  = coalesce(extract('TaskName">([^<]+)', 1, EventData), extract('RuleName">([^<]+)', 1, EventData))
