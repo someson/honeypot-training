@@ -189,6 +189,124 @@ Defender portal → Cases → Case 1870 "Honeypot - RDP Brute Force (failed logo
 Incident graph: `87.106.147.134` → `HR-FILE-SRV-01`. The IP targeted a single account
 (`Administrator`), so this is password guessing against one account, not password spraying.
 
+## Phase 4: Simulated breach and forensics
+
+No classmate was available, so I played the attacker myself: RDP logon with the real credentials,
+then the four actions from the brief, typed by hand in an elevated PowerShell.
+
+### 1. Ground truth
+
+| Time (UTC) | Action |
+|---|---|
+| 20:50:53 | Elevated PowerShell after RDP logon as `hrsvcadmin` |
+| 20:51:23 | Recon: `whoami /all; net user; ipconfig /all` |
+| 20:52:23 | `New-LocalUser svc_backup`, `Add-LocalGroupMember Administrators` |
+| 20:52:49 | `netsh advfirewall set allprofiles state off` |
+| 20:53:16 | `Invoke-WebRequest … -OutFile C:\Users\Public\Downloads\update.txt` |
+| 20:53:42 | `schtasks /create /tn MicrosoftEdgeUpdateCheck … /sc onstart /ru SYSTEM` |
+| 20:54:20 | `logoff` |
+
+### 2. Logon (4624)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where TimeGenerated between (datetime(2026-11-03 20:45) .. datetime(2026-11-03 21:10)) | where EventID in (4624, 4634, 4647) and TargetUserName =~ 'hrsvcadmin' and LogonType in (2, 3, 7, 10) | project TimeGenerated, EventID, LogonType, IpAddress | sort by TimeGenerated asc" --output table
+EventID    IpAddress      LogonType    TableName      TimeGenerated
+---------  -------------  -----------  -------------  ----------------------------
+4624       <my-ip>        3            PrimaryResult  2026-11-03T20:49:06.5286794Z
+4624       <my-ip>        10           PrimaryResult  2026-11-03T20:49:07.7821706Z
+```
+
+LogonType 3 is the NLA pre-authentication, LogonType 10 the interactive RDP session.
+
+### 3. Account changes (4720, 4722, 4724, 4732, 4738)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where TimeGenerated between (datetime(2026-11-03 20:45) .. datetime(2026-11-03 21:10)) | where EventID in (4720, 4722, 4724, 4732, 4738) | extend Actor=extract('SubjectUserName\">([^<]+)', 1, EventData) | project TimeGenerated, EventID, Activity, Actor, TargetUserName | sort by TimeGenerated asc" --output table
+Activity                                                      Actor       EventID    TableName      TargetUserName    TimeGenerated
+------------------------------------------------------------  ----------  ---------  -------------  ----------------  ----------------------------
+4720 - A user account was created.                            hrsvcadmin  4720       PrimaryResult  svc_backup        2026-11-03T20:52:22.997304Z
+4722 - A user account was enabled.                            hrsvcadmin  4722       PrimaryResult  svc_backup        2026-11-03T20:52:22.9999669Z
+4738 - A user account was changed.                            hrsvcadmin  4738       PrimaryResult  svc_backup        2026-11-03T20:52:23.000007Z
+4738 - A user account was changed.                            hrsvcadmin  4738       PrimaryResult  svc_backup        2026-11-03T20:52:23.0161147Z
+4724 - An attempt was made to reset an account's password.    hrsvcadmin  4724       PrimaryResult  svc_backup        2026-11-03T20:52:23.016124Z
+4732 - A member was added to a security-enabled local group.  hrsvcadmin  4732       PrimaryResult  Administrators    2026-11-03T20:52:23.0409787Z
+```
+
+### 4. Firewall disabled (4950)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where TimeGenerated between (datetime(2026-11-03 20:45) .. datetime(2026-11-03 21:10)) | where EventID == 4950 | extend Profile=extract('ProfileChanged\">([^<]+)', 1, EventData), Setting=extract('SettingType\">([^<]+)', 1, EventData), Value=extract('SettingValue\">([^<]+)', 1, EventData) | project TimeGenerated, Profile, Setting, Value | sort by TimeGenerated asc" --output table
+Profile    Setting                           TableName      TimeGenerated                 Value
+---------  --------------------------------  -------------  ----------------------------  -------
+(null)     Enable Windows Defender Firewall  PrimaryResult  2026-11-03T20:52:49.1794211Z  No
+(null)     Enable Windows Defender Firewall  PrimaryResult  2026-11-03T20:52:49.1810686Z  No
+(null)     Enable Windows Defender Firewall  PrimaryResult  2026-11-03T20:52:49.2166376Z  No
+```
+
+One event per firewall profile. 4950 carries no actor; Sysmon attributes it.
+
+### 5. Process creation (Sysmon Event ID 1)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "Event | where TimeGenerated between (datetime(2026-11-03 20:45) .. datetime(2026-11-03 21:10)) | where Source == 'Microsoft-Windows-Sysmon' and EventID == 1 | extend User=extract('Name=\"User\">([^<]+)', 1, EventData), CommandLine=extract('Name=\"CommandLine\">([^<]+)', 1, EventData) | where User has 'hrsvcadmin' | project TimeGenerated, CommandLine | sort by TimeGenerated asc" --output table
+```
+
+Relevant rows (logon noise from Explorer, Edge and Server Manager omitted):
+
+| Time (UTC) | CommandLine |
+|---|---|
+| 20:49:27 | `ffmpeg.exe … -f gdigrab … C:\ProgramData\SessionRec\videos\hrsvcadmin_20261103-204925_%%03d.mkv` |
+| 20:50:50 | `powershell.exe` |
+| 20:51:23 | `whoami.exe /all` |
+| 20:51:23 | `net.exe user` / `net1 user` |
+| 20:51:23 | `ipconfig.exe /all` |
+| 20:52:49 | `netsh.exe advfirewall set allprofiles state off` |
+| 20:53:42 | `schtasks.exe /create /tn MicrosoftEdgeUpdateCheck /tr "cmd.exe /c whoami > C:\Users\Public\persist.txt" /sc onstart /ru SYSTEM /rl HIGHEST /f` |
+| 20:54:20 | `logoff.exe` |
+
+`New-LocalUser` and `Invoke-WebRequest` are cmdlets inside the running `powershell.exe`, so they
+create no process and do not appear here.
+
+### 6. PowerShell script blocks (4104)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "Event | where TimeGenerated between (datetime(2026-11-03 20:45) .. datetime(2026-11-03 21:10)) | where Source == 'Microsoft-Windows-PowerShell' and EventID == 4104 | extend Script=extract('Name=\"ScriptBlockText\">([^<]+)', 1, EventData) | where Script has_any ('Invoke-WebRequest', 'New-LocalUser') | project TimeGenerated, Script | sort by TimeGenerated asc" --output table
+```
+
+| Time (UTC) | ScriptBlockText |
+|---|---|
+| 20:52:22 | `New-LocalUser -Name 'svc_backup' … ; Add-LocalGroupMember -Group 'Administrators' -Member 'svc_backup'` |
+| 20:53:16 | `Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/README.md' -OutFile 'C:\Users\Public\Downloads\update.txt'` |
+
+### 7. Detection
+
+The tuned rule raised Case 1879 "Honeypot - User created / firewall changed / scheduled task created"
+(High) for the attack. Manage case → Open, assigned to myself.
+
+### 8. Verification
+
+| Action | Found in |
+|---|---|
+| RDP logon | 4624 (LogonType 3 → 10) |
+| Recon | Sysmon 1 |
+| User created, added to Administrators | 4720, 4722, 4724, 4732 + PowerShell 4104 |
+| Firewall disabled | 4950 + Sysmon 1 (`netsh`) |
+| File downloaded via PowerShell | PowerShell 4104 |
+| Scheduled task for persistence | Sysmon 1 (`schtasks`) |
+| Logoff | Sysmon 1 (`logoff.exe`) |
+
+All seven actions were found; nothing was missed.
+
+### 9. Cleanup
+
+```
+PS C:\Users\hrsvcadmin> netsh advfirewall set allprofiles state on; Remove-LocalUser -Name 'svc_backup'; schtasks.exe /delete /tn 'MicrosoftEdgeUpdateCheck' /f; Remove-Item 'C:\Users\Public\Downloads\update.txt', 'C:\Users\Public\persist.txt' -ErrorAction SilentlyContinue; 'cleanup done'
+Ok.
+
+SUCCESS: The scheduled task "MicrosoftEdgeUpdateCheck" was successfully deleted.
+cleanup done
+```
+
 ## Phase 5: Improvements
 
 ### 1. Sysmon events in Sentinel
