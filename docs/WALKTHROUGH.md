@@ -116,3 +116,37 @@ The Security log reaches `SecurityEvent`. 4688/4689 (process creation/terminatio
 (scheduled task updated) are present, so `Enable-AuditPolicy.ps1` took effect.
 
 **Phase 1 complete.**
+
+## Phase 2: Smoke test
+
+### 1. Failed RDP logons from the Mac
+
+```
+❯ printf 'full address:s:%s\nusername:s:%s\n' "$(terraform -chdir=infra/terraform output -raw vm_public_ip)" "$(terraform -chdir=infra/terraform output -raw admin_username)" > /tmp/honeypot.rdp && open /tmp/honeypot.rdp
+```
+
+Windows App: 5 logon attempts with a wrong password.
+
+### 2. Failed logons in Sentinel (Event ID 4625)
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where EventID == 4625 | where TimeGenerated > ago(1h) | project TimeGenerated, TargetUserName, IpAddress, LogonType | sort by TimeGenerated desc" --output table
+IpAddress      LogonType    TableName      TargetUserName    TimeGenerated
+-------------  -----------  -------------  ----------------  ----------------------------
+<my-ip>        3            PrimaryResult  hrsvcadmin        2026-11-03T16:36:48.9877177Z
+<my-ip>        3            PrimaryResult  hrsvcadmin        2026-11-03T16:36:41.4566416Z
+<my-ip>        3            PrimaryResult  hrsvcadmin        2026-11-03T16:36:38.9942705Z
+<my-ip>        3            PrimaryResult  hrsvcadmin        2026-11-03T16:36:35.4187131Z
+<my-ip>        3            PrimaryResult  hrsvcadmin        2026-11-03T16:36:28.0338692Z
+```
+
+### 3. Brute Force incident
+
+Defender portal → Cases → search "Honeypot":
+
+| Case ID | Name | Severity | Status |
+|---|---|---|---|
+| 1824 | Honeypot - RDP Brute Force (failed logons from single IP) | Medium | New |
+
+Manage case → Select status: **Open** (In Progress group) → assigned to myself → Save.
+Incident graph: `<my-ip>` → `HR-FILE-SRV-01` → `hrsvcadmin`.
