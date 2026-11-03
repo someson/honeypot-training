@@ -1,0 +1,31 @@
+// Phase 3 / 6: which usernames bots try, and attack volume over time.
+let MyIPs = dynamic(["203.0.113.10"]);
+// --- Top 20 usernames ------------------------------------------------------
+SecurityEvent
+| where EventID == 4625 and isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+| where IpAddress !in (MyIPs)
+| extend User = tolower(TargetUserName)
+| summarize Attempts = count(), FromIPs = dcount(IpAddress) by User
+| top 20 by Attempts
+| render barchart
+
+// --- Attempts per hour -----------------------------------------------------
+// SecurityEvent
+// | where EventID == 4625 and IpAddress !in ("-", "")
+// | summarize Attempts = count() by bin(TimeGenerated, 1h)
+// | render timechart
+
+// --- One IP hitting many accounts (password spraying) ----------------------
+// SecurityEvent
+// | where EventID == 4625 and IpAddress !in ("-", "")
+// | summarize Accounts = dcount(TargetUserName), Attempts = count() by IpAddress
+// | where Accounts >= 5
+// | sort by Accounts desc
+
+// --- Did anyone get in? Successful network/RDP logons from public IPs ------
+// SecurityEvent
+// | where EventID == 4624 and LogonType in (3, 10)
+// | where isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+// | where not(coalesce(ipv4_is_private(IpAddress), false))
+// | project TimeGenerated, TargetUserName, IpAddress, LogonType,
+//           Country = tostring(geo_info_from_ip_address(IpAddress).country)

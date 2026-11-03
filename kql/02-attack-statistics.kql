@@ -1,0 +1,13 @@
+// Phase 3 / 6: statistics for the report. Put your own IP(s) into MyIPs to exclude the smoke test.
+let MyIPs = dynamic(["203.0.113.10"]);
+let Failed = SecurityEvent
+    | where EventID == 4625
+    | where isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+    | where IpAddress !in (MyIPs);
+// --- 1. Totals -------------------------------------------------------------
+Failed
+| summarize TotalAttempts = count(),
+            UniqueIPs      = dcount(IpAddress),
+            UniqueAccounts = dcount(TargetUserName),
+            FirstSeen      = min(TimeGenerated),
+            LastSeen       = max(TimeGenerated)

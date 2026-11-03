@@ -1,0 +1,42 @@
+// Phase 4: reconstruct the classmate's session as one timeline.
+// Set Attacker to the account you gave them, and the window around their session.
+let Attacker = "hrsvcadmin";
+let Host     = "HR-FILE-SRV-01";
+let Start    = ago(1d);           // or datetime(2026-10-28 18:00:00)
+let End      = now();
+// --- Security log --------------------------------------------------------------
+let Sec = SecurityEvent
+    | where TimeGenerated between (Start .. End) and Computer startswith Host
+    | where EventID in (4624, 4634, 4647, 4672, 4688, 4720, 4722, 4724, 4726, 4732, 4738,
+                        4698, 4699, 4702, 4946, 4947, 4948, 4950, 4719, 1102, 4778, 4779)
+    // keep only the attacker's activity; firewall events (494x/4950) carry no subject user
+    | where SubjectUserName =~ Attacker or TargetUserName =~ Attacker
+         or EventID in (4946, 4947, 4948, 4950, 1102)
+    // drop noisy non-interactive logons
+    | where not(EventID == 4624 and LogonType !in (2, 3, 7, 10, 11))
+    | extend Details = case(
+        EventID == 4624, strcat("Logon type ", LogonType, " from ", IpAddress, " (", WorkstationName, ")"),
+        EventID == 4688, CommandLine,
+        EventID in (4720, 4722, 4724, 4726, 4738), strcat("Target account: ", TargetUserName),
+        EventID == 4732, strcat(MemberName, " ", MemberSid, " -> group ", TargetUserName),
+        EventID in (4698, 4699, 4702), EventData,
+        Activity)
+    | project TimeGenerated, Log = "Security", EventID, Activity, Details;
+// --- Sysmon (if installed) -------------------------------------------------------
+let Sys = Event
+    | where TimeGenerated between (Start .. End) and Computer startswith Host
+    | where Source == "Microsoft-Windows-Sysmon" and EventID in (1, 3, 11, 13, 22)
+    | extend ed = parse_xml(EventData)
+    | mv-apply d = ed.DataItem.EventData.Data on (
+        summarize f = make_bag(bag_pack(tostring(d["@Name"]), tostring(d["#text"]))))
+    | where tostring(f.User) has Attacker
+    | extend Details = case(
+        EventID == 1,  tostring(f.CommandLine),
+        EventID == 3,  strcat(tostring(f.Image), " -> ", tostring(f.DestinationIp), ":", tostring(f.DestinationPort)),
+        EventID == 11, strcat(tostring(f.Image), " wrote ", tostring(f.TargetFilename)),
+        EventID == 13, strcat(tostring(f.TargetObject), " = ", tostring(f.Details)),
+        EventID == 22, strcat(tostring(f.Image), " resolved ", tostring(f.QueryName)),
+        "")
+    | project TimeGenerated, Log = "Sysmon", EventID, Activity = RenderedDescription, Details;
+union Sec, Sys
+| sort by TimeGenerated asc

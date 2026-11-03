@@ -1,0 +1,10 @@
+// Phase 2: your own 3 failed RDP attempts from the Mac.
+// Your public IP: run `curl -s https://ifconfig.me` on the Mac.
+// Ingestion delay is usually 2-10 minutes.
+SecurityEvent
+| where TimeGenerated > ago(1h)
+| where EventID == 4625
+| project TimeGenerated, Computer, TargetUserName, IpAddress, LogonType,
+          Status, SubStatus, WorkstationName
+| sort by TimeGenerated desc
+// SubStatus 0xC000006A = wrong password for an existing user, 0xC0000064 = user does not exist.

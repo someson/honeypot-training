@@ -1,0 +1,40 @@
+// Phase 4 / 5: focused hunting queries. Run one block at a time.
+// --- Sysmon EID 1: every process with full command line -------------------------
+Event
+| where Source == "Microsoft-Windows-Sysmon" and EventID == 1
+| extend ed = parse_xml(EventData)
+| mv-apply d = ed.DataItem.EventData.Data on (
+    summarize f = make_bag(bag_pack(tostring(d["@Name"]), tostring(d["#text"]))))
+| project TimeGenerated, User = tostring(f.User), Image = tostring(f.Image),
+          CommandLine = tostring(f.CommandLine), Parent = tostring(f.ParentCommandLine)
+| where User !has "SYSTEM" and User !has "NETWORK SERVICE" and User !has "LOCAL SERVICE"
+| sort by TimeGenerated asc
+
+// --- Without Sysmon: 4688 with command line (needs Enable-AuditPolicy.ps1) ------
+// SecurityEvent
+// | where EventID == 4688 and SubjectUserName !endswith "$"
+// | project TimeGenerated, SubjectUserName, NewProcessName, CommandLine, ParentProcessName
+
+// --- PowerShell download (script block logging 4104) ----------------------------
+// Event
+// | where Source == "Microsoft-Windows-PowerShell" and EventID == 4104
+// | extend ScriptBlock = tostring(parse_xml(EventData).DataItem.EventData.Data[2]["#text"])
+// | where ScriptBlock has_any ("Invoke-WebRequest", "iwr", "wget", "curl", "DownloadFile", "DownloadString", "Start-BitsTransfer")
+// | project TimeGenerated, Computer, ScriptBlock
+
+// --- Firewall disabled ------------------------------------------------------------
+// SecurityEvent | where EventID == 4950 | project TimeGenerated, Activity, EventData
+// Event
+// | where Source == "Microsoft-Windows-Windows Firewall With Advanced Security" and EventID == 2003
+// | project TimeGenerated, RenderedDescription, EventData
+
+// --- Persistence: scheduled tasks -------------------------------------------------
+// SecurityEvent
+// | where EventID == 4698
+// | extend x = parse_xml(EventData)
+// | project TimeGenerated, SubjectUserName, EventData
+
+// --- New users / admin group changes ----------------------------------------------
+// SecurityEvent
+// | where EventID in (4720, 4722, 4724, 4732)
+// | project TimeGenerated, Activity, Actor = SubjectUserName, TargetUserName, MemberSid

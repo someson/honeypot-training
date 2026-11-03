@@ -1,0 +1,29 @@
+// Phase 3: attacker IP -> country/city with the built-in geo_info_from_ip_address().
+// Run the blocks one at a time (select a block, then Run).
+let MyIPs = dynamic(["203.0.113.10"]);
+let Failed = SecurityEvent
+    | where EventID == 4625
+    | where isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+    | where IpAddress !in (MyIPs)
+    | where not(coalesce(ipv4_is_private(IpAddress), false));
+// --- Per IP ----------------------------------------------------------------
+Failed
+| summarize Attempts = count(),
+            Accounts = dcount(TargetUserName),
+            SampleAccounts = make_set(TargetUserName, 10),
+            FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated)
+        by IpAddress
+| extend geo = geo_info_from_ip_address(IpAddress)
+| extend Country = tostring(geo.country), City = tostring(geo.city)
+| project-away geo
+| sort by Attempts desc
+
+// --- Per country (answer to "which country attacked the most") -------------
+// let MyIPs = dynamic(["203.0.113.10"]);
+// SecurityEvent
+// | where EventID == 4625 and isnotempty(IpAddress) and IpAddress !in ("-", "127.0.0.1", "::1")
+// | where IpAddress !in (MyIPs)
+// | extend Country = tostring(geo_info_from_ip_address(IpAddress).country)
+// | summarize Attempts = count(), IPs = dcount(IpAddress) by Country
+// | sort by Attempts desc
+// | render piechart

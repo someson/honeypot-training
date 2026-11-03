@@ -1,0 +1,10 @@
+# cp terraform.tfvars.example terraform.tfvars
+# subscription_id         = "00000000-0000-0000-0000-000000000000"
+location                  = "westeurope"
+vm_name                   = "HR-FILE-SRV-01"
+vm_size                   = "Standard_D2s_v6"
+admin_username            = "hrsvcadmin"
+rdp_source_address_prefix = "*" # Any. For hardening: "203.0.113.10/32"
+bootstrap_vm              = true
+install_session_recorder  = false
+brute_force_threshold     = 3 # raise to 10-20 after the smoke test to reduce noise

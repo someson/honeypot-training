@@ -1,0 +1,224 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Honeypot Dashboard — HR-FILE-SRV-01\nFailed RDP logons (4625) from the internet: where they come from and which usernames bots try."
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "parameters": [
+          {
+            "id": "2f1c9d0e-0001-4c1a-9a01-000000000001",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 604800000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 1209600000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "2f1c9d0e-0002-4c1a-9a01-000000000002",
+            "version": "KqlParameterItem/1.0",
+            "name": "ExcludeIPs",
+            "label": "Exclude my IPs (comma-separated)",
+            "type": 1,
+            "value": "203.0.113.10"
+          }
+        ]
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| summarize Value = count() | extend Metric = \"Failed logons\"\n| union (SecurityEvent | where EventID == 4625 | where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\") | where IpAddress !in (split(\"{ExcludeIPs}\", \",\")) | summarize Value = dcount(IpAddress) | extend Metric = \"Unique IPs\")\n| union (SecurityEvent | where EventID == 4625 | where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\") | where IpAddress !in (split(\"{ExcludeIPs}\", \",\")) | summarize Value = dcount(TargetUserName) | extend Metric = \"Unique usernames\")\n| union (SecurityEvent | where EventID == 4625 | where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\") | where IpAddress !in (split(\"{ExcludeIPs}\", \",\")) | extend Country = tostring(geo_info_from_ip_address(IpAddress).country) | summarize Value = dcount(Country) | extend Metric = \"Countries\")",
+        "size": 4,
+        "title": "Totals",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "Metric",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "Value",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 4
+              }
+            }
+          },
+          "showBorder": true
+        }
+      },
+      "name": "kpis"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| summarize FailedAttempts = count() by IpAddress\n| extend geo = geo_info_from_ip_address(IpAddress)\n| extend Country = tostring(geo.country), City = tostring(geo.city), latitude = toreal(geo.latitude), longitude = toreal(geo.longitude)\n| where isnotnull(latitude)\n| project IpAddress, Country, City, latitude, longitude, FailedAttempts",
+        "size": 0,
+        "title": "Attack origins",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "map",
+        "mapSettings": {
+          "locInfo": "LatLong",
+          "latitude": "latitude",
+          "longitude": "longitude",
+          "sizeSettings": "FailedAttempts",
+          "sizeAggregation": "Sum",
+          "labelSettings": "Country",
+          "legendMetric": "FailedAttempts",
+          "legendAggregation": "Sum",
+          "itemColorSettings": {
+            "nodeColorField": "FailedAttempts",
+            "colorAggregation": "Sum",
+            "type": "heatmap",
+            "heatmapPalette": "greenRed"
+          }
+        }
+      },
+      "name": "map",
+      "customWidth": "60"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| extend Country = tostring(geo_info_from_ip_address(IpAddress).country)\n| summarize Attempts = count() by Country\n| top 10 by Attempts",
+        "size": 0,
+        "title": "Top countries",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart"
+      },
+      "name": "countries",
+      "customWidth": "40"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| summarize Attempts = count() by User = tolower(TargetUserName)\n| top 15 by Attempts",
+        "size": 0,
+        "title": "Most targeted usernames",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "name": "usernames",
+      "customWidth": "50"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| summarize Attempts = count() by bin(TimeGenerated, 1h)",
+        "size": 0,
+        "title": "Failed logons over time",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      },
+      "name": "timeline",
+      "customWidth": "50"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where IpAddress !in (split(\"{ExcludeIPs}\", \",\"))\n| summarize Attempts = count(), Accounts = dcount(TargetUserName), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated) by IpAddress\n| extend Country = tostring(geo_info_from_ip_address(IpAddress).country)\n| top 25 by Attempts",
+        "size": 0,
+        "title": "Top attacker IPs",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "topips"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4624 and LogonType in (3, 10)\n| where isnotempty(IpAddress) and IpAddress !in (\"-\", \"127.0.0.1\", \"::1\")\n| where not(coalesce(ipv4_is_private(IpAddress), false))\n| project TimeGenerated, TargetUserName, IpAddress, LogonType, Country = tostring(geo_info_from_ip_address(IpAddress).country)\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Successful network/RDP logons from public IPs (should be only you and your classmate)",
+        "timeContextFromParameter": "TimeRange",
+        "timeContext": {
+          "durationMs": 604800000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "success"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
