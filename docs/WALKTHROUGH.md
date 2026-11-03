@@ -151,6 +151,44 @@ Defender portal → Cases → search "Honeypot":
 Manage case → Select status: **Open** (In Progress group) → assigned to myself → Save.
 Incident graph: `<my-ip>` → `HR-FILE-SRV-01` → `hrsvcadmin`.
 
+## Phase 3: The stakeout
+
+### 1. First third-party failed logons
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where EventID == 4625 and not(IpAddress in ('-', '', '<my-ip>')) | summarize Attempts=count(), Users=make_set(TargetUserName, 10), First=min(TimeGenerated), Last=max(TimeGenerated) by IpAddress | extend Country=tostring(geo_info_from_ip_address(IpAddress).country)" --output table
+Attempts    Country    First                         IpAddress       Last                          TableName      Users
+----------  ---------  ----------------------------  --------------  ----------------------------  -------------  -----------------
+7           Germany    2026-11-03T20:00:01.0053459Z  87.106.147.134  2026-11-03T20:30:00.5864563Z  PrimaryResult  ["Administrator"]
+```
+
+First attempt about 4 hours after deployment. 7 attempts in 30 minutes (roughly every 5 minutes),
+only `Administrator`: a slow brute force that stays under typical lockout thresholds.
+
+### 2. Geo-IP and reputation: 87.106.147.134
+
+AbuseIPDB (https://www.abuseipdb.com/check/87.106.147.134):
+
+| Field | Value |
+|---|---|
+| Abuse confidence score | 100% (Critical) |
+| Reports | 514 from 107 distinct reporters, first reported 2026-02-26, latest minutes ago |
+| ISP / ASN | IONOS SE, AS8560 |
+| Usage type | Data Center / Web Hosting / Transit |
+| Location | Berlin, Germany |
+| Most common categories | Brute-Force 289, Hacking 163, SSH 71, Port Scan 52, Web App Attack 13 |
+
+Other honeypots reported the same IP for RDP brute force within the same hour: a hosted server
+running an internet-wide RDP scanning campaign, not a targeted attack.
+
+### 3. Incident triage and investigation graph
+
+Defender portal → Cases → Case 1870 "Honeypot - RDP Brute Force (failed logons from single IP)":
+4 alerts grouped into one incident by the IP entity. Manage case → Open, assigned to myself.
+
+Incident graph: `87.106.147.134` → `HR-FILE-SRV-01`. The IP targeted a single account
+(`Administrator`), so this is password guessing against one account, not password spraying.
+
 ## Phase 5: Improvements
 
 ### 1. Sysmon events in Sentinel
