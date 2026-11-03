@@ -364,22 +364,15 @@ Defender portal → Microsoft Sentinel → Threat management → Workbooks → M
 Honeypot Dashboard → View saved workbook. All tiles render. The "Exclude my IPs" parameter
 is set to my own IP so only third-party attempts are shown.
 
-### 4. RDP session recording
-
-`install_session_recorder = true` in `infra/terraform/terraform.tfvars`, then:
-
-```
-❯ terraform -chdir=infra/terraform apply
-...
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-```
-
-`Install-SessionRecorder.ps1` ran via Run Command: ffmpeg records every interactive logon at 2 fps
-into `C:\ProgramData\SessionRec\videos\<user>_<timestamp>_NNN.mkv`.
-
-### 5. Stop duplicate alerts
+### 4. Stop duplicate alerts
 
 Case 1824 (my own 5 smoke-test attempts) had grown to 12 alerts, Case 1870 to 9: each rule ran every
 5 minutes over a 1 h (or 10 min) lookback and re-alerted on the same events. All three rules now alert
 only on events ingested since the previous run (`ingestion_time() > ago(5m)`); the Brute Force rule
 keeps its 1 h lookback so slow attacks (one attempt every 5 minutes) are still counted.
+
+```
+❯ terraform -chdir=infra/terraform apply
+...
+Apply complete! Resources: 0 added, 3 changed, 0 destroyed.
+```

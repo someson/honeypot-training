@@ -30,7 +30,7 @@ terraform -chdir=infra/terraform apply
 Open the VM in Windows App:
 
 ```bash
-printf 'full address:s:%s\nusername:s:%s\n' "$(terraform -chdir=infra/terraform output -raw vm_public_ip)" "$(terraform -chdir=infra/terraform output -raw admin_username)" > /tmp/honeypot.rdp && open /tmp/honeypot.rdp
+printf 'full address:s:%s\nusername:s:%s\nscreen mode id:i:1\ndesktopwidth:i:1920\ndesktopheight:i:1080\nsmart sizing:i:1\n' "$(terraform -chdir=infra/terraform output -raw vm_public_ip)" "$(terraform -chdir=infra/terraform output -raw admin_username)" > /tmp/honeypot.rdp && open /tmp/honeypot.rdp
 ```
 
 PowerShell is not required locally: all `.ps1` scripts run on the Windows VM itself
