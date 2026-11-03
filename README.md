@@ -7,18 +7,30 @@ classmate.
 > Everything here is scaffolding. The real data (IPs, countries, attempt counts)
 > only comes from your own workspace.
 
-## Quick start (macOS, `az` and `terraform` already installed)
+## Quick start (macOS)
 
 ```bash
 az login
 ```
 
+All commands run from the repository root.
+
 ```bash
-cd infra/terraform && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
 ```bash
-open "$(terraform output -raw rdp_url)"
+terraform -chdir=infra/terraform init
+```
+
+```bash
+terraform -chdir=infra/terraform apply
+```
+
+Open the VM in Windows App:
+
+```bash
+printf 'full address:s:%s\nusername:s:%s\n' "$(terraform -chdir=infra/terraform output -raw vm_public_ip)" "$(terraform -chdir=infra/terraform output -raw admin_username)" > /tmp/honeypot.rdp && open /tmp/honeypot.rdp
 ```
 
 PowerShell is not required locally: all `.ps1` scripts run on the Windows VM itself
@@ -96,7 +108,7 @@ flowchart LR
 - [ ] **Phase 3.** Wait for bots (minutes to hours), triage incidents, Geo-IP, Investigation Graph
 - [ ] **Phase 4.** Classmate logs in and performs actions; rebuild the timeline (`kql/05-attack-timeline.kql`) and compare with their list
 - [ ] **Phase 5.** Sysmon, session recording, workbook, optionally T-Pot
-- [ ] **When done:** `terraform destroy` so you stop paying and the exposed VM is gone
+- [ ] **When done:** `terraform -chdir=infra/terraform destroy` so you stop paying and the exposed VM is gone
 
 ## Safety and cost
 

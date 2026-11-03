@@ -12,11 +12,6 @@ output "admin_password" {
   sensitive   = true
 }
 
-output "rdp_url" {
-  description = "macOS: open \"$(terraform output -raw rdp_url)\"  (opens Windows App)"
-  value       = "rdp://full%20address=s:${azurerm_public_ip.vm.ip_address}:3389&username=s:${var.admin_username}"
-}
-
 output "workspace_id" {
   value = azurerm_log_analytics_workspace.this.id
 }

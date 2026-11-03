@@ -193,3 +193,17 @@ All of it is built-in Windows activity: tasks created by the machine account and
 firewall rules. The rule now reads the actor from `EventData` (the `SubjectUserName` column is empty)
 and excludes the machine account, `\Microsoft\Windows\` tasks and `WinDefend` firewall rules.
 The tuned query returns no rows on the same data.
+
+```
+❯ terraform -chdir=infra/terraform apply
+...
+Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+```
+
+Case 1816 (the false positive) → Manage case → Closed, classified as False positive.
+
+### 3. Honeypot Dashboard workbook
+
+Defender portal → Microsoft Sentinel → Threat management → Workbooks → My workbooks →
+Honeypot Dashboard → View saved workbook. All tiles render. The "Exclude my IPs" parameter
+is set to my own IP so only third-party attempts are shown.
