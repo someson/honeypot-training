@@ -139,8 +139,15 @@ resource "azurerm_sentinel_alert_rule_scheduled" "persistence_and_defense_evasio
   query = <<-KQL
     SecurityEvent
     | where EventID in (4720, 4732, 4698, 4946, 4947, 4948, 4950, 1102)
-    | extend Actor = iff(isnotempty(SubjectUserName) and SubjectUserName != "-", SubjectUserName, "n/a")
-    | project TimeGenerated, Computer, EventID, Activity, Actor, TargetUserName
+    // The SubjectUserName column is empty for these events via AMA; read it from EventData.
+    | extend Actor = coalesce(extract('SubjectUserName">([^<]+)', 1, EventData), "n/a"),
+             Name  = coalesce(extract('TaskName">([^<]+)', 1, EventData), extract('RuleName">([^<]+)', 1, EventData))
+    // Noise seen on a fresh VM: built-in tasks created by the machine account (SYSTEM)
+    // and Microsoft Defender's service-hardening firewall rules.
+    | where not(Actor endswith "$")
+    | where not(EventID == 4698 and Name startswith @"\Microsoft\Windows\")
+    | where not(EventID in (4946, 4947, 4948) and Name has "WinDefend")
+    | project TimeGenerated, Computer, EventID, Activity, Actor, Name, TargetUserName
   KQL
 
   entity_mapping {

@@ -150,3 +150,46 @@ Defender portal → Cases → search "Honeypot":
 
 Manage case → Select status: **Open** (In Progress group) → assigned to myself → Save.
 Incident graph: `<my-ip>` → `HR-FILE-SRV-01` → `hrsvcadmin`.
+
+## Phase 5: Improvements
+
+### 1. Sysmon events in Sentinel
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "Event | where Source == 'Microsoft-Windows-Sysmon' | summarize Events=count() by EventID | sort by Events desc" --output table
+EventID    Events    TableName
+---------  --------  -------------
+13         990       PrimaryResult
+11         190       PrimaryResult
+1          90        PrimaryResult
+22         12        PrimaryResult
+3          10        PrimaryResult
+12         4         PrimaryResult
+```
+
+### 2. Tune the persistence / defense evasion rule
+
+The rule "Honeypot - User created / firewall changed / scheduled task created" raised a false positive
+right after deployment. The events behind it:
+
+```
+❯ az monitor log-analytics query --workspace "$(terraform -chdir=infra/terraform output -raw workspace_customer_id)" --analytics-query "SecurityEvent | where EventID in (4698, 4946, 4948) | extend Actor=extract('SubjectUserName\">([^<]+)', 1, EventData), Name=coalesce(extract('TaskName\">([^<]+)', 1, EventData), extract('RuleName\">([^<]+)', 1, EventData)) | project TimeGenerated, EventID, Actor, Name | sort by TimeGenerated asc" --output table
+Actor            EventID    Name                                                                 TableName      TimeGenerated
+---------------  ---------  -------------------------------------------------------------------  -------------  ----------------------------
+HR-FILE-SRV-01$  4698       \Microsoft\Windows\UpdateOrchestrator\Schedule Work                  PrimaryResult  2026-11-03T16:08:12.4077208Z
+HR-FILE-SRV-01$  4698       \Microsoft\Windows\UpdateOrchestrator\Schedule Wake To Work          PrimaryResult  2026-11-03T16:08:12.4210889Z
+HR-FILE-SRV-01$  4698       \Microsoft\Windows\UpdateOrchestrator\Schedule Maintenance Work      PrimaryResult  2026-11-03T16:08:12.4600347Z
+                 4948       Inbound service restriction rule for WinDefend                       PrimaryResult  2026-11-03T16:08:33.1838307Z
+                 4948       Outbound service restriction rule for WinDefend                      PrimaryResult  2026-11-03T16:08:33.1944785Z
+                 4946       Inbound service restriction rule for WinDefend                       PrimaryResult  2026-11-03T16:08:33.1969335Z
+                 4946       Outbound service restriction rule for WinDefend                      PrimaryResult  2026-11-03T16:08:33.1982729Z
+                 4948       WinDefend Outbound for TCP                                           PrimaryResult  2026-11-03T16:08:33.1986305Z
+                 4946       WinDefend Outbound for TCP                                           PrimaryResult  2026-11-03T16:08:33.2018144Z
+HR-FILE-SRV-01$  4698       \Microsoft\Windows\Defrag\ScheduledDefrag                            PrimaryResult  2026-11-03T16:13:42.6751449Z
+HR-FILE-SRV-01$  4698       \Microsoft\Windows\Windows Defender\Windows Defender Scheduled Scan  PrimaryResult  2026-11-03T16:18:44.0078891Z
+```
+
+All of it is built-in Windows activity: tasks created by the machine account and Microsoft Defender's
+firewall rules. The rule now reads the actor from `EventData` (the `SubjectUserName` column is empty)
+and excludes the machine account, `\Microsoft\Windows\` tasks and `WinDefend` firewall rules.
+The tuned query returns no rows on the same data.
